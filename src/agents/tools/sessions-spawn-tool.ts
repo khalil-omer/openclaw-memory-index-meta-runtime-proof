@@ -26,6 +26,7 @@ import { optionalStringEnum } from "../schema/typebox.js";
 import type { SpawnedToolContext } from "../spawned-context.js";
 import { resolveAcpSessionsSpawnImageAttachments } from "../subagent-attachments.js";
 import { registerSubagentRun } from "../subagent-registry.js";
+import type { SubagentWorkGraphReference } from "../subagent-registry.types.js";
 import { resolveSubagentSpawnOwnership } from "../subagent-spawn-ownership.js";
 import {
   SUBAGENT_SPAWN_CONTEXT_MODES,
@@ -222,6 +223,26 @@ function createSessionsSpawnToolSchema(params: {
         mountPath: Type.Optional(Type.String()),
       }),
     ),
+    workId: Type.Optional(
+      Type.String({
+        description: "Beads issue id for the durable work item this spawned worker is executing.",
+      }),
+    ),
+    workOwner: Type.Optional(Type.String({ description: "Beads owner/assignee metadata." })),
+    workParent: Type.Optional(Type.String({ description: "Parent Beads issue id." })),
+    workDiscoveredFrom: Type.Optional(
+      Type.String({ description: "Beads issue id that discovered this worker task." }),
+    ),
+    workDependsOn: Type.Optional(
+      Type.Array(Type.String(), {
+        description: "Beads issue ids that block this worker task.",
+        maxItems: 20,
+      }),
+    ),
+    workRepo: Type.Optional(Type.String({ description: "Repository metadata for Beads work." })),
+    workNextAction: Type.Optional(
+      Type.String({ description: "Next action metadata for the Beads work item." }),
+    ),
     ...(params.acpAvailable
       ? {
           resumeSessionId: Type.Optional(
@@ -238,6 +259,42 @@ function createSessionsSpawnToolSchema(params: {
       : {}),
   };
   return Type.Object(schema);
+}
+
+function readStringArrayParam(params: Record<string, unknown>, key: string): string[] | undefined {
+  const value = params[key];
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+  const values = value.filter(
+    (item): item is string => typeof item === "string" && item.trim() !== "",
+  );
+  return values.length > 0 ? values : undefined;
+}
+
+function readWorkGraphReference(
+  params: Record<string, unknown>,
+): SubagentWorkGraphReference | undefined {
+  const issueId = readStringParam(params, "workId");
+  if (!issueId) {
+    return undefined;
+  }
+  const owner = readStringParam(params, "workOwner");
+  const parentIssueId = readStringParam(params, "workParent");
+  const discoveredFromIssueId = readStringParam(params, "workDiscoveredFrom");
+  const dependencies = readStringArrayParam(params, "workDependsOn");
+  const repo = readStringParam(params, "workRepo");
+  const nextAction = readStringParam(params, "workNextAction");
+  return {
+    system: "beads",
+    issueId,
+    ...(owner ? { owner } : {}),
+    ...(parentIssueId ? { parentIssueId } : {}),
+    ...(discoveredFromIssueId ? { discoveredFromIssueId } : {}),
+    ...(dependencies ? { dependencies } : {}),
+    ...(repo ? { repo } : {}),
+    ...(nextAction ? { nextAction } : {}),
+  };
 }
 
 function resolveAcpUnavailableMessage(opts?: { sandboxed?: boolean; config?: OpenClawConfig }) {
@@ -324,6 +381,7 @@ export function createSessionsSpawnTool(
         params.context === "fork" || params.context === "isolated" ? params.context : undefined;
       const streamTo = runtime === "acp" && params.streamTo === "parent" ? "parent" : undefined;
       const lightContext = params.lightContext === true;
+      const workGraph = readWorkGraphReference(params);
       const roleContext = requestedAgentId ? { role: requestedAgentId } : {};
       if (runtime === "acp" && !acpAvailable) {
         return jsonResult({
@@ -454,6 +512,7 @@ export function createSessionsSpawnTool(
               runTimeoutSeconds: result.runTimeoutSeconds,
               expectsCompletionMessage: shouldExpectCompletionMessage,
               spawnMode: trackedSpawnMode,
+              workGraph,
             });
           } catch (err) {
             // Best-effort only: the ACP turn was already started above, so deleting the
@@ -492,6 +551,7 @@ export function createSessionsSpawnTool(
             params.attachAs && typeof params.attachAs === "object"
               ? readStringParam(params.attachAs as Record<string, unknown>, "mountPath")
               : undefined,
+          workGraph,
         },
         {
           agentSessionKey: opts?.agentSessionKey,

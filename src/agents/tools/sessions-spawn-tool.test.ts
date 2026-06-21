@@ -415,6 +415,40 @@ describe("sessions_spawn tool", () => {
     expect(spawnArgs.taskName).toBe("review_subagents");
   });
 
+  it("passes Beads work graph metadata to subagent spawns", async () => {
+    const tool = createSessionsSpawnTool({
+      agentSessionKey: "agent:main:main",
+    });
+    const schema = tool.parameters as {
+      properties?: Record<string, { description?: string; type?: string } | undefined>;
+    };
+
+    expect(requireSchemaProperty(schema.properties, "workId").description).toContain("Beads");
+
+    await tool.execute("call-work-graph", {
+      task: "implement Beads ownership seam",
+      workId: "bd-123",
+      workOwner: "codex-worker",
+      workParent: "bd-parent",
+      workDiscoveredFrom: "bd-discovery",
+      workDependsOn: ["bd-blocker"],
+      workRepo: "openclaw/openclaw",
+      workNextAction: "run focused tests",
+    });
+
+    const spawnArgs = mockCallArg(hoisted.spawnSubagentDirectMock, 0, 0, "spawnSubagentDirect");
+    expect(spawnArgs.workGraph).toEqual({
+      system: "beads",
+      issueId: "bd-123",
+      owner: "codex-worker",
+      parentIssueId: "bd-parent",
+      discoveredFromIssueId: "bd-discovery",
+      dependencies: ["bd-blocker"],
+      repo: "openclaw/openclaw",
+      nextAction: "run focused tests",
+    });
+  });
+
   it.each(["Bad-Name", "code review", "-bad"])(
     "rejects invalid taskName %s before spawning",
     async (taskName) => {
@@ -795,6 +829,34 @@ describe("sessions_spawn tool", () => {
     expect(registration.cleanup).toBe("keep");
     expect(registration.runTimeoutSeconds).toBe(120);
     expect(registration.spawnMode).toBe("run");
+  });
+
+  it("records Beads work graph metadata for tracked ACP runs", async () => {
+    registerAcpBackendForTest();
+    hoisted.spawnAcpDirectMock.mockResolvedValueOnce({
+      status: "accepted",
+      childSessionKey: "agent:codex:acp:1",
+      runId: "run-acp",
+      mode: "run",
+    });
+    const tool = createSessionsSpawnTool({
+      agentSessionKey: "agent:main:subagent:parent",
+    });
+
+    await tool.execute("call-acp-work-graph", {
+      runtime: "acp",
+      task: "investigate",
+      agentId: "codex",
+      workId: "bd-acp",
+      workOwner: "acp-worker",
+    });
+
+    const registration = mockCallArg(hoisted.registerSubagentRunMock, 0, 0, "registerSubagentRun");
+    expect(registration.workGraph).toEqual({
+      system: "beads",
+      issueId: "bd-acp",
+      owner: "acp-worker",
+    });
   });
 
   it("suppresses completion announces for inline ACP session delivery", async () => {

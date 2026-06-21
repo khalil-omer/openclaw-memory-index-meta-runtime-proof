@@ -81,6 +81,26 @@ openclaw work claim <bead-id>
 openclaw work show <bead-id>
 ```
 
+When spawning a worker for claimed work, pass the Beads issue id into
+`sessions_spawn` so the durable graph and runtime activity stay linked:
+
+```json
+{
+  "task": "Implement the Beads-backed ownership seam and run focused tests",
+  "taskName": "beads-ownership-seam",
+  "workId": "<bead-id>",
+  "workOwner": "codex-worker",
+  "workDependsOn": ["<blocking-bead-id>"],
+  "workRepo": "openclaw/openclaw",
+  "workNextAction": "run focused tests"
+}
+```
+
+OpenClaw stores that Beads reference on the subagent runtime record and passes it
+into the child prompt. Beads still owns assignment, dependency, ready/blocked,
+and next-action state; the subagent record only proves which runtime execution
+worked on the issue.
+
 When a PR lands or a task is intentionally abandoned, close the Beads item with the reason:
 
 ```bash
@@ -100,6 +120,7 @@ Use Beads metadata for operational fields that were previously easy to put in ad
 | Next action  | `metadata.nextAction` or issue notes             |
 | Blockers     | Beads dependency edges                           |
 | Ready work   | `bd ready --json` / `openclaw work ready --json` |
+| Worker run   | `sessions_spawn.workId` links runtime evidence   |
 
 Keep OpenClaw task ledger records for runtime execution evidence: task IDs, run IDs, session keys, delivery status, terminal outcome, and cleanup. Link those runtime facts from Beads notes or metadata only when they help coordination.
 

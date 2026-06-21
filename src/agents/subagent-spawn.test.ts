@@ -257,6 +257,14 @@ describe("spawnSubagentDirect seam flow", () => {
       {
         task: "inspect the spawn seam",
         model: "openai/gpt-5.4",
+        workGraph: {
+          system: "beads",
+          issueId: "bd-spawn",
+          owner: "codex-worker",
+          dependencies: ["bd-blocker"],
+          repo: "openclaw/openclaw",
+          nextAction: "verify worker status",
+        },
       },
       {
         agentSessionKey: "agent:main:main",
@@ -293,6 +301,14 @@ describe("spawnSubagentDirect seam flow", () => {
     expect(registerInput.workspaceDir).toBe("/tmp/requester-workspace");
     expect(registerInput.expectsCompletionMessage).toBe(true);
     expect(registerInput.spawnMode).toBe("run");
+    expect(registerInput.workGraph).toEqual({
+      system: "beads",
+      issueId: "bd-spawn",
+      owner: "codex-worker",
+      dependencies: ["bd-blocker"],
+      repo: "openclaw/openclaw",
+      nextAction: "verify worker status",
+    });
     expect(hoisted.emitSessionLifecycleEventMock).toHaveBeenCalledWith({
       sessionKey: childSessionKey,
       reason: "create",
@@ -315,6 +331,8 @@ describe("spawnSubagentDirect seam flow", () => {
     const agentParams = requireRecord(agentRequest.params);
     expect(agentParams.sessionKey).toBe(childSessionKey);
     expect(agentParams.cleanupBundleMcpOnRunEnd).toBe(true);
+    expect(agentParams.extraSystemPrompt).toContain("Beads issue: bd-spawn");
+    expect(result.workGraph).toEqual(registerInput.workGraph);
   });
 
   it("dispatches spawned agent runs in process when a gateway context is available", async () => {

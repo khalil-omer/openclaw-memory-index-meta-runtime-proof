@@ -160,6 +160,7 @@ export type RegisterSubagentRunParams = {
   attachmentsDir?: string;
   attachmentsRootDir?: string;
   retainAttachmentsOnKeep?: boolean;
+  workGraph?: SubagentRunRecord["workGraph"];
 };
 
 export function createSubagentRunManager(params: {
@@ -673,6 +674,7 @@ export function createSubagentRunManager(params: {
       attachmentsDir: registerParams.attachmentsDir,
       attachmentsRootDir: registerParams.attachmentsRootDir,
       retainAttachmentsOnKeep: registerParams.retainAttachmentsOnKeep,
+      workGraph: registerParams.workGraph,
     });
     params.runs.set(runId, entry);
     try {

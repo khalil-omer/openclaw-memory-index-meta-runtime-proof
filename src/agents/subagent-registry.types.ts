@@ -8,6 +8,17 @@ import type { SubagentRunOutcome } from "./subagent-announce-output.js";
 import type { SubagentLifecycleEndedReason } from "./subagent-lifecycle-events.js";
 import type { SpawnSubagentMode } from "./subagent-spawn.types.js";
 
+export type SubagentWorkGraphReference = {
+  system: "beads";
+  issueId: string;
+  owner?: string;
+  parentIssueId?: string;
+  discoveredFromIssueId?: string;
+  dependencies?: string[];
+  repo?: string;
+  nextAction?: string;
+};
+
 export type PendingFinalDeliveryPayload = {
   requesterSessionKey: string;
   requesterOrigin?: DeliveryContext;
@@ -116,6 +127,8 @@ export type SubagentRunRecord = {
   wakeOnDescendantSettle?: boolean;
   execution?: SubagentExecutionState;
   completion?: SubagentCompletionState;
+  /** Durable Beads work item this runtime run is executing. Beads remains the source of truth. */
+  workGraph?: SubagentWorkGraphReference;
   /** Set after the subagent_ended hook has been emitted successfully once. */
   endedHookEmittedAt?: number;
   /** Set after cleanupBrowserSessionsForLifecycleEnd has been dispatched once. */

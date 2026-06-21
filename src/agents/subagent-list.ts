@@ -51,6 +51,7 @@ type SubagentListItem = {
   totalTokens?: number;
   startedAt?: number;
   endedAt?: number;
+  workGraph?: SubagentRunRecord["workGraph"];
 };
 
 type BuiltSubagentList = {
@@ -286,6 +287,7 @@ export function buildSubagentList(params: {
       totalTokens,
       startedAt: getSubagentSessionStartedAt(entry),
       ...(entry.endedAt ? { endedAt: entry.endedAt } : {}),
+      ...(entry.workGraph ? { workGraph: entry.workGraph } : {}),
     };
     index += 1;
     return view;

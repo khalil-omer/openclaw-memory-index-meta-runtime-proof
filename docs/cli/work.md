@@ -115,6 +115,25 @@ openclaw work close <id> [--reason <text>] [--json]
 
 Closes a Beads item after the durable coordination work is complete or intentionally superseded.
 
+## Worker spawns
+
+`openclaw work` owns the durable graph. Worker execution still uses
+`sessions_spawn`, with Beads metadata attached to the runtime record:
+
+```json
+{
+  "task": "Review the failing check and patch the owner module",
+  "workId": "<bead-id>",
+  "workOwner": "codex-worker",
+  "workDependsOn": ["<blocking-bead-id>"],
+  "workRepo": "openclaw/openclaw",
+  "workNextAction": "push PR update"
+}
+```
+
+Use these fields only to link a worker run to Beads. Update ownership,
+dependency, ready/blocked, and close state with Beads commands.
+
 ## Related
 
 - [Work tracking](/automation/work-tracking)

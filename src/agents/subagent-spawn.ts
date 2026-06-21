@@ -75,6 +75,7 @@ export {
   SUBAGENT_SPAWN_SESSION_ACCEPTED_NOTE,
 } from "./subagent-spawn-accepted-note.js";
 import { resolveRequesterOriginForChild } from "./spawn-requester-origin.js";
+import type { SubagentWorkGraphReference } from "./subagent-registry.types.js";
 import {
   resolveConfiguredSubagentRunTimeoutSeconds,
   resolveSubagentModelAndThinkingPlan,
@@ -187,6 +188,7 @@ export type SpawnSubagentParams = {
     mimeType?: string;
   }>;
   attachMountPath?: string;
+  workGraph?: SubagentWorkGraphReference;
 };
 
 export type SpawnSubagentContext = {
@@ -227,6 +229,7 @@ export type SpawnSubagentResult = {
     files: Array<{ name: string; bytes: number; sha256: string }>;
     relDir: string;
   };
+  workGraph?: SubagentWorkGraphReference;
 };
 
 export { splitModelRef } from "./subagent-spawn-plan.js";
@@ -1080,6 +1083,34 @@ function hasRoutableDeliveryOrigin(
   return Boolean(origin?.channel && origin.to);
 }
 
+function buildWorkGraphPromptSuffix(workGraph?: SubagentWorkGraphReference): string | undefined {
+  if (!workGraph) {
+    return undefined;
+  }
+  const lines = [
+    "Durable work coordination:",
+    `- Beads issue: ${workGraph.issueId}`,
+    "- Treat Beads as the source of truth for ownership, dependency, ready/blocked status, and next action.",
+    "- Keep OpenClaw task/session records as execution evidence only.",
+  ];
+  if (workGraph.owner) {
+    lines.push(`- Owner: ${workGraph.owner}`);
+  }
+  if (workGraph.parentIssueId) {
+    lines.push(`- Parent issue: ${workGraph.parentIssueId}`);
+  }
+  if (workGraph.discoveredFromIssueId) {
+    lines.push(`- Discovered from: ${workGraph.discoveredFromIssueId}`);
+  }
+  if (workGraph.dependencies && workGraph.dependencies.length > 0) {
+    lines.push(`- Blocking dependencies: ${workGraph.dependencies.join(", ")}`);
+  }
+  if (workGraph.nextAction) {
+    lines.push(`- Next action: ${workGraph.nextAction}`);
+  }
+  return lines.join("\n");
+}
+
 export async function spawnSubagentDirect(
   params: SpawnSubagentParams,
   ctx: SpawnSubagentContext,
@@ -1452,6 +1483,10 @@ export async function spawnSubagentDirect(
     childDepth,
     maxSpawnDepth,
   });
+  const workGraphPromptSuffix = buildWorkGraphPromptSuffix(params.workGraph);
+  if (workGraphPromptSuffix) {
+    childSystemPrompt = `${childSystemPrompt}\n\n${workGraphPromptSuffix}`;
+  }
 
   let retainOnSessionKeep = false;
   let attachmentsReceipt:
@@ -1683,6 +1718,7 @@ export async function spawnSubagentDirect(
       attachmentsDir: attachmentAbsDir,
       attachmentsRootDir: attachmentRootDir,
       retainAttachmentsOnKeep: retainOnSessionKeep,
+      workGraph: params.workGraph,
     });
   } catch (err) {
     await rollbackPreparedContextEngine(contextEnginePreparation);
@@ -1767,6 +1803,7 @@ export async function spawnSubagentDirect(
     ...resolvedModelMetadata,
     modelApplied: resolvedModel ? modelApplied : undefined,
     attachments: attachmentsReceipt,
+    workGraph: params.workGraph,
   };
 }
 
