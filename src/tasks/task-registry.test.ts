@@ -572,7 +572,7 @@ describe("task-registry", () => {
     });
   });
 
-  it("lets a run-scoped success repair a provisional timeout", async () => {
+  it("keeps timeout ownership over a late run-scoped success", async () => {
     await withTaskRegistryTempDir(async () => {
       resetTaskRegistryMemoryForTest();
 
@@ -606,9 +606,9 @@ describe("task-registry", () => {
       });
 
       expectRecordFields(requireTaskByRunId("run-timeout-then-success"), {
-        status: "succeeded",
-        endedAt: 300,
-        terminalSummary: "completed",
+        status: "timed_out",
+        endedAt: 200,
+        terminalSummary: undefined,
       });
     });
   });
@@ -655,7 +655,7 @@ describe("task-registry", () => {
     });
   });
 
-  it("lets a lifecycle retry success repair an aborted same-run terminal state", async () => {
+  it("keeps lifecycle timeout ownership over a later success", async () => {
     await withTaskRegistryTempDir(async () => {
       resetTaskRegistryMemoryForTest();
 
@@ -690,8 +690,52 @@ describe("task-registry", () => {
       });
 
       expectRecordFields(requireTaskByRunId("run-aborted-then-success"), {
-        status: "succeeded",
-        endedAt: 300,
+        status: "timed_out",
+        endedAt: 200,
+      });
+    });
+  });
+
+  it("keeps lifecycle cancellations terminal over later success", async () => {
+    await withTaskRegistryTempDir(async () => {
+      resetTaskRegistryMemoryForTest();
+
+      createTaskRecord({
+        runtime: "cli",
+        ownerKey: "agent:main:main",
+        scopeKind: "session",
+        childSessionKey: "agent:main:main",
+        runId: "run-cancelled-then-success",
+        task: "Do the thing",
+        status: "running",
+        deliveryStatus: "not_applicable",
+        startedAt: 100,
+      });
+
+      emitAgentEvent({
+        runId: "run-cancelled-then-success",
+        stream: "lifecycle",
+        data: {
+          phase: "end",
+          endedAt: 200,
+          aborted: true,
+          stopReason: "rpc",
+          timeoutPhase: "queue",
+          providerStarted: false,
+        },
+      });
+      emitAgentEvent({
+        runId: "run-cancelled-then-success",
+        stream: "lifecycle",
+        data: {
+          phase: "end",
+          endedAt: 300,
+        },
+      });
+
+      expectRecordFields(requireTaskByRunId("run-cancelled-then-success"), {
+        status: "cancelled",
+        endedAt: 200,
       });
     });
   });
@@ -925,6 +969,38 @@ describe("task-registry", () => {
         endedAt: 300,
         error: undefined,
         terminalSummary: "completed",
+      });
+    });
+  });
+
+  it("keeps lost tasks terminal over a late run-scoped success", async () => {
+    await withTaskRegistryTempDir(async () => {
+      resetTaskRegistryMemoryForTest();
+
+      createTaskRecord({
+        runtime: "cli",
+        ownerKey: "agent:main:main",
+        scopeKind: "session",
+        childSessionKey: "agent:main:main",
+        runId: "run-lost-then-success",
+        task: "Lost task",
+        status: "lost",
+        deliveryStatus: "not_applicable",
+        startedAt: 100,
+        endedAt: 200,
+      });
+
+      markTaskTerminalByRunId({
+        runId: "run-lost-then-success",
+        runtime: "cli",
+        status: "succeeded",
+        endedAt: 300,
+        terminalSummary: "completed",
+      });
+
+      expectRecordFields(requireTaskByRunId("run-lost-then-success"), {
+        status: "lost",
+        terminalSummary: undefined,
       });
     });
   });

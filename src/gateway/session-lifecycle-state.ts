@@ -2,6 +2,7 @@
 // Converts agent run lifecycle events into session row/store status updates.
 import {
   buildAgentRunTerminalOutcome,
+  mergeAgentRunTerminalOutcome,
   type AgentRunTerminalOutcome,
 } from "../agents/agent-run-terminal-outcome.js";
 import { updateSessionStoreEntry, type SessionEntry } from "../config/sessions.js";
@@ -86,18 +87,48 @@ function resolveTerminalOutcome(event: LifecycleEventLike): AgentRunTerminalOutc
 
 function shouldApplyTerminalLifecycleStatus(params: {
   currentStatus?: SessionRunStatus;
-  nextStatus: SessionRunStatus;
+  currentEndedAt?: number;
+  incoming: AgentRunTerminalOutcome;
 }): boolean {
-  if (params.currentStatus === params.nextStatus) {
+  const current = params.currentStatus
+    ? mapSessionStatusToAgentRunTerminalOutcome(params.currentStatus, params.currentEndedAt)
+    : undefined;
+  const merged = mergeAgentRunTerminalOutcome(current, params.incoming);
+  if (merged !== params.incoming) {
+    return false;
+  }
+  const nextStatus = mapAgentRunTerminalOutcomeToSessionStatus(params.incoming);
+  if (params.currentStatus === nextStatus) {
     return true;
   }
   if (params.currentStatus === "done") {
     return false;
   }
-  if (params.nextStatus === "done") {
+  if (nextStatus === "done") {
     return true;
   }
   return params.currentStatus === "running" || params.currentStatus === undefined;
+}
+
+function mapSessionStatusToAgentRunTerminalOutcome(
+  status: SessionRunStatus,
+  endedAt?: number,
+): AgentRunTerminalOutcome | undefined {
+  const timing = isFiniteTimestamp(endedAt) ? { endedAt } : {};
+  switch (status) {
+    case "running":
+      return undefined;
+    case "done":
+      return { reason: "completed", status: "ok", ...timing };
+    case "timeout":
+      return { reason: "hard_timeout", status: "timeout", ...timing };
+    case "killed":
+      return { reason: "cancelled", status: "error", ...timing };
+    case "failed":
+      return { reason: "failed", status: "error", ...timing };
+    default:
+      return status satisfies never;
+  }
 }
 
 function resolveLifecycleStartedAt(
@@ -167,7 +198,11 @@ export function deriveGatewaySessionLifecycleSnapshot(params: {
   const terminal = resolveTerminalOutcome(params.event);
   const status = mapAgentRunTerminalOutcomeToSessionStatus(terminal);
   if (
-    !shouldApplyTerminalLifecycleStatus({ currentStatus: existing?.status, nextStatus: status })
+    !shouldApplyTerminalLifecycleStatus({
+      currentStatus: existing?.status,
+      currentEndedAt: existing?.endedAt,
+      incoming: terminal,
+    })
   ) {
     return {
       updatedAt: existing?.updatedAt,

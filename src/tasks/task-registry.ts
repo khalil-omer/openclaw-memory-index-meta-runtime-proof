@@ -497,6 +497,13 @@ function shouldApplyRunScopedStatusUpdate(params: {
   if (params.currentStatus === "succeeded") {
     return params.nextStatus !== "lost";
   }
+  if (
+    params.currentStatus === "cancelled" ||
+    params.currentStatus === "lost" ||
+    params.currentStatus === "timed_out"
+  ) {
+    return false;
+  }
   return params.nextStatus === "succeeded";
 }
 

@@ -177,8 +177,8 @@ describe("session lifecycle state", () => {
     });
   });
 
-  it("repairs an aborted terminal projection when the retry succeeds before cleanup", () => {
-    const aborted = deriveGatewaySessionLifecycleSnapshot({
+  it("keeps a cancelled terminal projection over a late lifecycle success", () => {
+    const cancelled = deriveGatewaySessionLifecycleSnapshot({
       session: {
         updatedAt: 1_000,
         status: "running",
@@ -198,7 +198,7 @@ describe("session lifecycle state", () => {
       },
     });
 
-    expect(aborted).toMatchObject({
+    expect(cancelled).toMatchObject({
       status: "killed",
       abortedLastRun: true,
       endedAt: 1_500,
@@ -206,7 +206,7 @@ describe("session lifecycle state", () => {
 
     expect(
       deriveGatewaySessionLifecycleSnapshot({
-        session: aborted,
+        session: cancelled,
         event: {
           ts: 1_700,
           data: {
@@ -216,10 +216,49 @@ describe("session lifecycle state", () => {
           },
         },
       }),
+    ).toEqual(cancelled);
+  });
+
+  it("keeps hard timeouts unless completion finished before the timeout", () => {
+    const timeout = {
+      updatedAt: 1_500,
+      status: "timeout" as const,
+      startedAt: 1_100,
+      endedAt: 1_500,
+      runtimeMs: 400,
+      abortedLastRun: false,
+    };
+
+    expect(
+      deriveGatewaySessionLifecycleSnapshot({
+        session: timeout,
+        event: {
+          ts: 1_700,
+          data: {
+            phase: "end",
+            startedAt: 1_100,
+            endedAt: 1_700,
+          },
+        },
+      }),
+    ).toEqual(timeout);
+
+    expect(
+      deriveGatewaySessionLifecycleSnapshot({
+        session: timeout,
+        event: {
+          ts: 1_450,
+          data: {
+            phase: "end",
+            startedAt: 1_100,
+            endedAt: 1_450,
+          },
+        },
+      }),
     ).toMatchObject({
       status: "done",
-      endedAt: 1_700,
-      runtimeMs: 600,
+      endedAt: 1_450,
+      runtimeMs: 350,
       abortedLastRun: false,
     });
   });
